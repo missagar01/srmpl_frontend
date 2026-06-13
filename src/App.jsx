@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Settings, Send, CheckCircle, Info, HelpCircle } from 'lucide-react';
 
+// Base URL from .env file (VITE_BACKEND_URL)
+// e.g. http://192.168.1.100:5000  →  set in frontend/.env
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+
 export default function App() {
   // Connection State
-  const [backendUrl, setBackendUrl] = useState('');
-  const [showSetup, setShowSetup] = useState(false);
-  const [urlInput, setUrlInput] = useState('');
-  const [connectionState, setConnectionState] = useState('connecting'); // connecting, connected, failed, setup
+  const [connectionState, setConnectionState] = useState('connecting'); // connecting, connected, failed
 
   // API Config
   const [apiKey, setApiKey] = useState('');
@@ -24,27 +25,9 @@ export default function App() {
 
   const messagesEndRef = useRef(null);
 
-  // Initialize Connection
+  // Initialize Connection using VITE_BACKEND_URL from .env
   useEffect(() => {
-    const currentOrigin = window.location.origin;
-    let targetUrl = '';
-
-    if (currentOrigin.includes(':5000')) {
-      targetUrl = '';
-      setBackendUrl('');
-    } else {
-      const savedUrl = localStorage.getItem('chatbot_backend_url');
-      if (savedUrl) {
-        targetUrl = savedUrl;
-        setBackendUrl(savedUrl);
-      } else {
-        setConnectionState('setup');
-        setShowSetup(true);
-        return;
-      }
-    }
-
-    loadBackendConfig(targetUrl);
+    loadBackendConfig(BACKEND_URL);
   }, []);
 
   // Scroll to bottom on new messages
@@ -53,11 +36,11 @@ export default function App() {
   }, [messages, suggestions]);
 
   // Load configuration from backend
-  const loadBackendConfig = async (url) => {
+  const loadBackendConfig = async (url = BACKEND_URL) => {
     setConnectionState('connecting');
     try {
       // 1. Fetch API Key
-      const configRes = await fetch(`${url}/api/chatbot/config`);
+      const configRes = await fetch(`${BACKEND_URL}/api/chatbot/config`);
       const configData = await configRes.json();
       const key = configData.apiKey;
       setApiKey(key);
@@ -65,11 +48,11 @@ export default function App() {
       // 2. Fetch Lists in parallel
       const headers = { 'x-api-key': key };
       const [deptRes, seriesRes, costRes, empRes, makeRes] = await Promise.all([
-        fetch(`${url}/api/chatbot/departments`, { headers }),
-        fetch(`${url}/api/chatbot/series`, { headers }),
-        fetch(`${url}/api/chatbot/cost-codes`, { headers }),
-        fetch(`${url}/api/chatbot/employees`, { headers }),
-        fetch(`${url}/api/chatbot/makes`, { headers })
+        fetch(`${BACKEND_URL}/api/chatbot/departments`, { headers }),
+        fetch(`${BACKEND_URL}/api/chatbot/series`, { headers }),
+        fetch(`${BACKEND_URL}/api/chatbot/cost-codes`, { headers }),
+        fetch(`${BACKEND_URL}/api/chatbot/employees`, { headers }),
+        fetch(`${BACKEND_URL}/api/chatbot/makes`, { headers })
       ]);
 
       const depts = await deptRes.json();
@@ -84,7 +67,6 @@ export default function App() {
       setEmployeesList(emps);
       setMakesList(makes);
       setConnectionState('connected');
-      setShowSetup(false);
 
       // Welcome User
       addBotMessage(
@@ -124,26 +106,9 @@ export default function App() {
     setMessages(prev => [...prev, newMsg]);
   };
 
-  // Save backend URL settings
-  const handleSaveSetup = () => {
-    let cleanUrl = urlInput.trim();
-    if (!cleanUrl) {
-      alert('Please enter a valid URL.');
-      return;
-    }
-    if (cleanUrl.endsWith('/')) {
-      cleanUrl = cleanUrl.slice(0, -1);
-    }
-    localStorage.setItem('chatbot_backend_url', cleanUrl);
-    setBackendUrl(cleanUrl);
-    setShowSetup(false);
-    loadBackendConfig(cleanUrl);
-  };
-
-  // Reset Connection Settings
+  // Retry Connection (reload page)
   const handleResetConnection = () => {
-    if (window.confirm('Reset connection settings?')) {
-      localStorage.removeItem('chatbot_backend_url');
+    if (window.confirm('Retry connection to backend?')) {
       window.location.reload();
     }
   };
@@ -164,7 +129,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch(`${backendUrl}/api/chatbot/items?q=${encodeURIComponent(val)}`, {
+      const res = await fetch(`${BACKEND_URL}/api/chatbot/items?q=${encodeURIComponent(val)}`, {
         headers: { 'x-api-key': apiKey }
       });
       const data = await res.json();
@@ -185,7 +150,7 @@ export default function App() {
     addUserMessage(val);
 
     try {
-      const res = await fetch(`${backendUrl}/api/chatbot/items?q=${encodeURIComponent(val)}`, {
+      const res = await fetch(`${BACKEND_URL}/api/chatbot/items?q=${encodeURIComponent(val)}`, {
         headers: { 'x-api-key': apiKey }
       });
       const items = await res.json();
@@ -219,7 +184,7 @@ export default function App() {
     addBotMessage("Wait, stock search ho raha hai...");
     
     try {
-      const res = await fetch(`${backendUrl}/api/chatbot/stock/${item.itemCode}`, {
+      const res = await fetch(`${BACKEND_URL}/api/chatbot/stock/${item.itemCode}`, {
         headers: { 'x-api-key': apiKey }
       });
       const data = await res.json();
@@ -303,7 +268,7 @@ export default function App() {
     addUserMessage("Confirm & Send to DB");
 
     try {
-      const response = await fetch(`${backendUrl}/api/chatbot/indent`, {
+      const response = await fetch(`${BACKEND_URL}/api/chatbot/indent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -370,12 +335,11 @@ export default function App() {
                          connectionState === 'connecting' ? 'var(--warning)' : 'var(--danger)'
                 }}>
                   {connectionState === 'connected' ? 'Connected to Oracle DB' : 
-                   connectionState === 'connecting' ? 'Connecting to Backend...' : 
-                   connectionState === 'setup' ? 'Setup Required' : 'Connection Failed'}
+                   connectionState === 'connecting' ? 'Connecting to Backend...' : 'Connection Failed'}
                 </span>
               </div>
               
-              <button className="settings-btn" onClick={handleResetConnection} title="Connection Settings">
+              <button className="settings-btn" onClick={handleResetConnection} title="Retry Connection">
                 <Settings size={18} />
               </button>
             </div>
@@ -501,22 +465,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* Setup Connection Modal */}
-      {showSetup && (
-        <div className="modal-overlay">
-          <div className="setup-card">
-            <h3>🔌 Connect to Backend</h3>
-            <p>Please enter the URL of the backend server to establish database connection:</p>
-            <input 
-              type="url" 
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="e.g. http://192.168.1.100:5000" 
-            />
-            <button onClick={handleSaveSetup}>Save and Connect</button>
-          </div>
-        </div>
-      )}
     </>
   );
 }
